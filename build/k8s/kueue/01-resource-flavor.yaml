@@ -1,0 +1,13 @@
+# Install Kueue first (pin the version you tested):
+#   kubectl apply --server-side -f https://github.com/kubernetes-sigs/kueue/releases/download/<VERSION>/manifests.yaml
+#
+# One flavor for now, because every node has the same GPU. If a second GPU
+# type is added later, give it its own flavor with a nodeLabels selector on
+# nvidia.com/gpu.product (set by GPU Feature Discovery).
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: ResourceFlavor
+metadata:
+  name: a10g
+spec:
+  nodeLabels:
+    nvidia.com/gpu.product: NVIDIA-A10G

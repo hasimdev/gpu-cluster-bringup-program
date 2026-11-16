@@ -1,0 +1,83 @@
+# Two-node DDP acceptance test, submitted through Kueue.
+#
+# Setup (once):
+#   kubectl -n research create configmap train-ddp --from-file=train_ddp.py
+# Run:
+#   kubectl apply -f ddp-job.yaml
+#   kubectl -n research logs -f job/ddp-bench --all-containers   # look for the RESULT line
+#
+# How it works: an Indexed Job gives each pod a stable hostname
+# (ddp-bench-0, ddp-bench-1). The headless Service makes those resolvable,
+# so every pod can find the rendezvous at ddp-bench-0.ddp-bench.
+# Kueue holds the Job suspended until both GPUs are free, then admits it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ddp-bench
+  namespace: research
+spec:
+  clusterIP: None
+  selector:
+    job-name: ddp-bench
+  ports:
+    - name: rendezvous
+      port: 29500
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ddp-bench
+  namespace: research
+  labels:
+    kueue.x-k8s.io/queue-name: team-research
+spec:
+  suspend: true                 # Kueue unsuspends it on admission
+  completionMode: Indexed
+  completions: 2
+  parallelism: 2
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      subdomain: ddp-bench      # must match the Service name
+      restartPolicy: Never
+      containers:
+        - name: trainer
+          # Pin to the image whose CUDA version matches the driver in the version matrix.
+          image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+          command: ["/bin/bash", "-c"]
+          args:
+            - >-
+              torchrun
+              --nnodes=2
+              --nproc-per-node=1
+              --node-rank=${JOB_COMPLETION_INDEX}
+              --master-addr=ddp-bench-0.ddp-bench
+              --master-port=29500
+              /workspace/train_ddp.py --steps 300 --amp
+          env:
+            - name: NCCL_DEBUG
+              value: INFO       # first runs only, it's noisy (RAID R4)
+            - name: NCCL_SOCKET_IFNAME
+              value: eth0
+          resources:
+            requests:
+              cpu: "3"
+              memory: 12Gi
+              nvidia.com/gpu: 1
+            limits:
+              memory: 12Gi
+              nvidia.com/gpu: 1
+          volumeMounts:
+            - name: script
+              mountPath: /workspace
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: script
+          configMap:
+            name: train-ddp
+        - name: dshm            # PyTorch and NCCL need more shared memory than the 64Mi default
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi

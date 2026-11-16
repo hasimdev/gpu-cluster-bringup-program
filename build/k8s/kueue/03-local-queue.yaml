@@ -1,0 +1,15 @@
+# Researchers submit to this queue by adding the label
+#   kueue.x-k8s.io/queue-name: team-research
+# to their Job. See ../../jobs/ddp-job.yaml for an example.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: research
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: LocalQueue
+metadata:
+  name: team-research
+  namespace: research
+spec:
+  clusterQueue: research

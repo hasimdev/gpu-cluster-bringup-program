@@ -1,0 +1,41 @@
+# Helm values for the NVIDIA GPU Operator.
+#
+#   helm repo add nvidia https://helm.ngc.nvidia.com/nvidia && helm repo update
+#   helm install gpu-operator nvidia/gpu-operator \
+#     --namespace gpu-operator --create-namespace \
+#     --version <PINNED_CHART_VERSION> \
+#     -f gpu-operator-values.yaml
+#
+# Version pinning is RAID risk R2. Fill in the chart and driver versions from
+# the agreed version matrix and record them in 05-launch-readiness.md. Don't
+# upgrade either one during the program.
+
+driver:
+  enabled: true            # the AMI has no NVIDIA driver, the operator installs it
+  # version: "<PINNED_DRIVER_VERSION>"   # must support the CUDA version in the training image
+
+toolkit:
+  enabled: true            # NVIDIA Container Toolkit, so containers can see the GPU
+
+devicePlugin:
+  enabled: true            # advertises nvidia.com/gpu to the scheduler
+
+dcgmExporter:
+  enabled: true            # GPU metrics for Prometheus, see ../monitoring/
+  serviceMonitor:
+    enabled: true          # requires the Prometheus Operator CRDs (kube-prometheus-stack)
+
+gfd:
+  enabled: true            # GPU Feature Discovery labels nodes with GPU model, memory, CUDA version
+
+nodeStatusExporter:
+  enabled: true
+
+migManager:
+  enabled: false           # A10G doesn't support MIG
+
+validator:
+  plugin:
+    env:
+      - name: WITH_WORKLOAD
+        value: "true"      # run a small CUDA workload as part of validation
